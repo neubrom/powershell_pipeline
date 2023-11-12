@@ -1,0 +1,31 @@
+name: PowerShell Script Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Run PowerShell Tests
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Setup PowerShell
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: '3.1.x' # Required for PowerShell on Linux runners
+
+    - name: Install Pester
+      shell: pwsh
+      run: |
+        Install-Module -Name Pester -Force -SkipPublisherCheck
+
+    - name: Run PowerShell Script Tests
+      shell: pwsh
+      run: |
+        Invoke-Pester \test\ps_pipeline.Tests.ps1 -Output Detailed

@@ -1,6 +1,14 @@
 # Assuming your functions are in a file named 'MyScriptFunctions.ps1'
 . .\ps_pipeline.ps1
 
+# Assuming the functions are in MyScriptFunctions.ps1
+. .\ps_pipeline.ps1 -sourceDir $env:SOURCE_DIR -targetDir $env:TARGET_DIR -logFile $env:LOG_FILE
+
+Describe "Test My Script Functions" {
+    # Your tests here
+}
+
+
 Describe "Get-FileHashMD5 Tests" {
     It "Calculates the correct MD5 hash for a known file" {
         $testFilePath = "test\File.txt"

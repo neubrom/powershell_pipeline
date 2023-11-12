@@ -27,10 +27,12 @@
 #>
 
 # Script Configuration
-$sourceDirs = @("C:\path\to\1", "C:\path\to\2")  # Source directories
-$targetDir = "C:\path\to\3"                      # Target directory
-$logFile = "C:\path\to\log.txt"                  # Log file path
-$regexPattern = "FO\d{8}(-1)?"                   # File matching pattern
+param (
+    [string]$sourceDir = $env:SOURCE_DIR,
+    [string]$targetDir = $env:TARGET_DIR,
+    [string]$logFile = $env:LOG_FILE
+    [string]$regexPattern = $env:REGEX_PATTERN
+)
 
 # Function to save MD5 checksum in a file
 function Save-MD5Checksum {

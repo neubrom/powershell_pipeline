@@ -1,10 +1,9 @@
 <#
 .SYNOPSIS
-    Copies files based on regex matching from source to target directories, calculates and verifies MD5 checksums, and logs operations.
+    Copies files based on regex matching from source to target directories, handles duplicates with versioning, calculates and verifies SHA-256 checksums, moves processed files to a backup directory, and logs operations.
 
 .DESCRIPTION
-    This script searches specified source directories for files matching a regex pattern and copies them to a target directory.
-    It calculates MD5 checksums for these files, compares them with existing checksums if available, and logs all operations including errors.
+    This script searches specified source directories for files matching a regex pattern, handles file duplicates by versioning if necessary, and copies them to a target directory. It calculates SHA-256 checksums for these files, compares them with existing checksums if available, moves successfully processed files to a backup directory, and logs all operations including errors.
 
 .PARAMETER sourceDirs
     Array of paths to the source directories where files are located.
@@ -12,81 +11,38 @@
 .PARAMETER targetDir
     Path of the target directory where files will be copied to.
 
+.PARAMETER backupDir
+    Path of the backup directory where successfully processed files will be moved to.
+
 .PARAMETER logFile
     Path to the log file for recording script operations and events.
 
+.PARAMETER regexPattern
+    The regex pattern used to identify files to be processed.
+
 .EXAMPLE
-    .\scriptName.ps1
-    Execute the script to copy and process files as per the specified parameters.
+    .\scriptName.ps1 -sourceDir "C:\source" -targetDir "C:\target" -backupDir "C:\backup" -logFile "C:\log.txt" -regexPattern "FO\d{8}"
 
 .NOTES
     Author: Roman Poltoratski
-    GPL-3.0 license
-    Version: 1.0
-    Update the sourceDirs, targetDir, and logFile variables as per your environment.
+    GPL-3.0 License
+    Version: 1.1
+    Update the sourceDirs, targetDir, backupDir, logFile, and regexPattern variables as per your environment.
 #>
 
-# Script Configuration
 param (
-    [string]$sourceDir = $env:SOURCE_DIR,
-    [string]$targetDir = $env:TARGET_DIR,
-    [string]$logFile = $env:LOG_FILE
-    [string]$regexPattern = $env:REGEX_PATTERN
+    [string[]]$sourceDirs,
+    [string]$targetDir,
+    [string]$backupDir,
+    [string]$logFile,
+    [string]$regexPattern
 )
 
-# Function to save MD5 checksum in a file
-function Save-MD5Checksum {
-    param (
-        [string]$filePath,
-        [string]$logFile
-    )
-
-    try {
-        $checksumFileName = "$filePath.md5"
-        $newMd5Hash = Get-FileHashMD5 -filePath $filePath
-
-        if (Test-Path -Path $checksumFileName) {
-            $existingMd5Hash = Get-Content -Path $checksumFileName
-
-            if ($existingMd5Hash -ne $newMd5Hash) {
-                Write-Log "Warning: MD5 hash mismatch for $filePath. Existing: $existingMd5Hash, New: $newMd5Hash" -logFile $logFile
-            }
-        }
-
-        $newMd5Hash | Out-File -FilePath $checksumFileName -Encoding ASCII
-        Write-Log "MD5 hash saved for $filePath" -logFile $logFile
-    } catch {
-        Write-Log "Error saving MD5 checksum for file: $filePath. Error: $_" -logFile $logFile
-    }
+function Get-FileHashSHA256 {
+    param ([string]$filePath)
+    (Get-FileHash -Path $filePath -Algorithm SHA256).Hash
 }
 
-# Function to save MD5 checksum in a file
-function Save-MD5Checksum {
-    param (
-        [string]$filePath,
-        [string]$logFile
-    )
-
-    try {
-        $checksumFileName = "$filePath.md5"
-        $newMd5Hash = Get-FileHashMD5 -filePath $filePath
-
-        if (Test-Path -Path $checksumFileName) {
-            $existingMd5Hash = Get-Content -Path $checksumFileName
-
-            if ($existingMd5Hash -ne $newMd5Hash) {
-                Write-Log "Warning: MD5 hash mismatch for $filePath. Existing: $existingMd5Hash, New: $newMd5Hash" -logFile $logFile
-            }
-        }
-
-        $newMd5Hash | Out-File -FilePath $checksumFileName -Encoding ASCII
-        Write-Log "MD5 hash saved for $filePath" -logFile $logFile
-    } catch {
-        Write-Log "Error saving MD5 checksum for file: $filePath. Error: $_" -logFile $logFile
-    }
-}
-
-# Function to write logs with timestamp
 function Write-Log {
     param (
         [string]$message,
@@ -94,38 +50,67 @@ function Write-Log {
     )
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     "$timestamp: $message" | Add-Content -Path $logFile
+}
 
-# Function to copy files based on pattern
 function Copy-FilesBasedOnPattern {
     param (
         [string]$sourceDir,
         [string]$targetDir,
         [string]$pattern,
-        [string]$logFile
+        [string]$logFile,
+        [string]$backupDir
     )
 
-    try {
-        $files = Get-ChildItem -Path $sourceDir -Recurse | Where-Object { $_.Name -match $pattern }
+    $files = Get-ChildItem -Path $sourceDir -Recurse | Where-Object { $_.Name -match $pattern }
 
-        foreach ($file in $files) {
-            $targetFilePath = Join-Path $targetDir $file.Name
+    foreach ($file in $files) {
+        $targetFilePath = Join-Path $targetDir $file.Name
+        $fileHash = Get-FileHashSHA256 -filePath $file.FullName
 
-            if (!(Test-Path -Path $targetFilePath)) {
-                Copy-Item -Path $file.FullName -Destination $targetFilePath
-                Write-Log "Copied file to $targetFilePath" -logFile $logFile
-                Save-MD5Checksum -filePath $targetFilePath -logFile $logFile
-            } else {
-                Write-Log "File already exists at destination: $targetFilePath" -logFile $logFile
+        if (Test-Path -Path $targetFilePath) {
+            $targetFileHash = Get-FileHashSHA256 -filePath $targetFilePath
+
+            if ($fileHash -ne $targetFileHash) {
+                $newFileName = Get-VersionedFileName -sourceDir $targetDir -fileName $file.Name
+                $targetFilePath = Join-Path $targetDir $newFileName
             }
         }
-    } catch {
-        Write-Log "Error copying files from $sourceDir to $targetDir. Error: $_" -logFile $logFile
+
+        Copy-Item -Path $file.FullName -Destination $targetFilePath
+        $copiedFileHash = Get-FileHashSHA256 -filePath $targetFilePath
+
+        if ($fileHash -eq $copiedFileHash) {
+            Write-Log "Successfully copied and verified file to $targetFilePath" -logFile $logFile
+            $backupFilePath = Join-Path $backupDir $file.Name
+            Move-Item -Path $file.FullName -Destination $backupFilePath
+            Write-Log "Moved source file to backup: $backupFilePath" -logFile $logFile
+        } else {
+            Write-Log "Hash mismatch after copying file to $targetFilePath" -logFile $logFile
+        }
     }
 }
 
-# Main Script Logic
+function Get-VersionedFileName {
+    param (
+        [string]$sourceDir,
+        [string]$fileName
+    )
+
+    $version = 1
+    $fileBaseName = [System.IO.Path]::GetFileNameWithoutExtension($fileName)
+    $fileExtension = [System.IO.Path]::GetExtension($fileName)
+    $newFileName = "${fileBaseName}_v$version$fileExtension"
+
+    while (Test-Path -Path (Join-Path $sourceDir $newFileName)) {
+        $version++
+        $newFileName = "${fileBaseName}_v$version$fileExtension"
+    }
+
+    return $newFileName
+}
+
 foreach ($sourceDir in $sourceDirs) {
-    Copy-FilesBasedOnPattern -sourceDir $sourceDir -targetDir $targetDir -pattern $regexPattern -logFile $logFile
+    Copy-FilesBasedOnPattern -sourceDir $sourceDir -targetDir $targetDir -pattern $regexPattern -logFile $logFile -backupDir $backupDir
 }
 
 Write-Log "Script execution completed." -logFile $logFile

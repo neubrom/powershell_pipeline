@@ -15,10 +15,18 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v2
 
-    - name: Setup PowerShell
-      uses: actions/setup-dotnet@v1
-      with:
-        dotnet-version: '3.1.x' # Required for PowerShell on Linux runners
+    - name: Setup PowerShell environment
+      shell: pwsh
+      run: |
+        # Setup test directories
+        $testSourceDir = "${Env:GITHUB_WORKSPACE}\testSource"
+        $testTargetDir = "${Env:GITHUB_WORKSPACE}\testTarget"
+        $testBackupDir = "${Env:GITHUB_WORKSPACE}\testBackup"
+        New-Item -ItemType Directory -Path $testSourceDir, $testTargetDir, $testBackupDir -Force
+
+        # Create a test file
+        $testFile = "${testSourceDir}\testFile.txt"
+        "Test content" | Out-File -FilePath $testFile
 
     - name: Install Pester
       shell: pwsh
@@ -28,4 +36,4 @@ jobs:
     - name: Run PowerShell Script Tests
       shell: pwsh
       run: |
-        Invoke-Pester \test\ps_pipeline.Tests.ps1 -Output Detailed
+        Invoke-Pester .\test\ps_pipeline.Tests.ps1 -Output Detailed

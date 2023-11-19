@@ -18,14 +18,16 @@ jobs:
     - name: Setup PowerShell environment
       shell: pwsh
       run: |
-        # Setup test directories
-        $testSourceDir = Join-Path $Env:GITHUB_WORKSPACE "testSource"
-        $testTargetDir = Join-Path $Env:GITHUB_WORKSPACE "testTarget"
-        $testBackupDir = Join-Path $Env:GITHUB_WORKSPACE "testBackup"
-        New-Item -ItemType Directory -Path $testSourceDir, $testTargetDir, $testBackupDir -Force
+        # Setup test directories as environment variables
+        echo "TEST_SOURCE_DIR=${Env:GITHUB_WORKSPACE}\testSource" >> $GITHUB_ENV
+        echo "TEST_TARGET_DIR=${Env:GITHUB_WORKSPACE}\testTarget" >> $GITHUB_ENV
+        echo "TEST_BACKUP_DIR=${Env:GITHUB_WORKSPACE}\testBackup" >> $GITHUB_ENV
+
+        # Create the directories
+        New-Item -ItemType Directory -Path ${{ env.TEST_SOURCE_DIR }}, ${{ env.TEST_TARGET_DIR }}, ${{ env.TEST_BACKUP_DIR }} -Force
 
         # Create a test file
-        $testFile = Join-Path $testSourceDir "testFile.txt"
+        $testFile = Join-Path ${{ env.TEST_SOURCE_DIR }} "testFile.txt"
         "Test content" | Out-File -FilePath $testFile
 
     - name: Install Pester

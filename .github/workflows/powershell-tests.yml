@@ -46,6 +46,13 @@ jobs:
         # List directories for debugging
         Get-ChildItem $Env:GITHUB_WORKSPACE -Recurse | Out-String
 
+    - name: Debugging - List Directories
+      shell: pwsh
+      run: |
+        Get-ChildItem $Env:GITHUB_WORKSPACE -Recurse | Out-String
+        Write-Host "Source Directory: $Env:TEST_SOURCE_DIR"
+        Write-Host "Target Directory: $Env:TEST_TARGET_DIR"
+        Write-Host "Backup Directory: $Env:TEST_BACKUP_DIR"
 
     - name: Install Pester
       shell: pwsh

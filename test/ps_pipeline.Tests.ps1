@@ -14,6 +14,10 @@ Describe "PowerShell Script ps_pipeline Tests" {
         # Create the directories
         New-Item -ItemType Directory -Path $testSourceDir, $testTargetDir, $testBackupDir -Force
 
+        # Check if the source directory exists
+        if (-not (Test-Path $testSourceDir)) {
+            throw "Source folder not found: $testSourceDir"
+
         # Create a test file in the source directory
         $testFile = Join-Path $testSourceDir "testFile.txt"
         "Test content" | Out-File -FilePath $testFile

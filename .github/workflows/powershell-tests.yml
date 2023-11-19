@@ -2,9 +2,9 @@ name: PowerShell Script Test
 
 on:
   push:
-    branches: [ main ]
+    branches: [ GUID ]
   pull_request:
-    branches: [ main ]
+    branches: [ GUID ]
 
 jobs:
   test:

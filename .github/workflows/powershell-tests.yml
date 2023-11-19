@@ -19,15 +19,18 @@ jobs:
       shell: pwsh
       run: |
         # Setup test directories as environment variables
-        echo "TEST_SOURCE_DIR=${Env:GITHUB_WORKSPACE}\testSource" >> $GITHUB_ENV
-        echo "TEST_TARGET_DIR=${Env:GITHUB_WORKSPACE}\testTarget" >> $GITHUB_ENV
-        echo "TEST_BACKUP_DIR=${Env:GITHUB_WORKSPACE}\testBackup" >> $GITHUB_ENV
+        echo "TEST_SOURCE_DIR=${Env:GITHUB_WORKSPACE}\testSource" | Out-File -FilePath $Env:GITHUB_ENV -Append
+        echo "TEST_TARGET_DIR=${Env:GITHUB_WORKSPACE}\testTarget" | Out-File -FilePath $Env:GITHUB_ENV -Append
+        echo "TEST_BACKUP_DIR=${Env:GITHUB_WORKSPACE}\testBackup" | Out-File -FilePath $Env:GITHUB_ENV -Append
 
+    - name: Create test directories and file
+      shell: pwsh
+      run: |
         # Create the directories
-        New-Item -ItemType Directory -Path ${{ env.TEST_SOURCE_DIR }}, ${{ env.TEST_TARGET_DIR }}, ${{ env.TEST_BACKUP_DIR }} -Force
-
+        New-Item -ItemType Directory -Path $Env:TEST_SOURCE_DIR, $Env:TEST_TARGET_DIR, $Env:TEST_BACKUP_DIR -Force
+        
         # Create a test file
-        $testFile = Join-Path ${{ env.TEST_SOURCE_DIR }} "testFile.txt"
+        $testFile = Join-Path $Env:TEST_SOURCE_DIR "testFile.txt"
         "Test content" | Out-File -FilePath $testFile
 
     - name: Install Pester

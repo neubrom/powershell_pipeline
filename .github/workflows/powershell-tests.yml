@@ -33,6 +33,20 @@ jobs:
         $testFile = Join-Path $Env:TEST_SOURCE_DIR "testFile.txt"
         "Test content" | Out-File -FilePath $testFile
 
+    - name: Create test directories and file
+      shell: pwsh
+      run: |
+        # Create the directories
+        New-Item -ItemType Directory -Path $Env:TEST_SOURCE_DIR, $Env:TEST_TARGET_DIR, $Env:TEST_BACKUP_DIR -Force
+        
+        # Create a test file
+        $testFile = Join-Path $Env:TEST_SOURCE_DIR "testFile.txt"
+        "Test content" | Out-File -FilePath $testFile
+
+        # List directories for debugging
+        Get-ChildItem $Env:GITHUB_WORKSPACE -Recurse | Out-String
+
+
     - name: Install Pester
       shell: pwsh
       run: |

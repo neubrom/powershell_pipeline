@@ -17,6 +17,7 @@ Describe "PowerShell Script ps_pipeline Tests" {
         # Check if the source directory exists
         if (-not (Test-Path $testSourceDir)) {
             throw "Source folder not found: $testSourceDir"
+             }
 
         # Create a test file in the source directory
         $testFile = Join-Path $testSourceDir "testFile.txt"

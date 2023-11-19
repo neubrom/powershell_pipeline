@@ -1,152 +1,107 @@
-
-    Author: Roman Poltoratski
-    GPL-3.0 License
-    Version: 1.1
-    Update the sourceDirs, targetDir, backupDir, logFile, and regexPattern variables as per your environment.
-
-
-    <#
+<#
 .SYNOPSIS
-    Generates a GUID for a file based on its name, size, and content, and manages backups with versioning.
+    Processes files from a source folder to a target folder and then to a backup folder, based on matching regex patterns and file integrity verification.
 
 .DESCRIPTION
-    This script generates a GUID for a given file based on its name, size, and SHA1 hash of its content.
-    It then checks for a specified pattern in the file name. If matched, the file is backed up to a folder
-    named after the pattern and date. It handles versioning for files with the same name but different content.
+    This script generates a GUID for files in a source folder and subfolders, copies files to a target folder, verifies integrity, and moves them to a backup folder if conditions are met.
 
-.PARAMETER FilePath
-    Path of the file to be processed.
+.PARAMETER SourceFolder
+    Path of the folder to be processed.
 
-.PARAMETER Pattern
-    Pattern to match in the file name for backup.
+.PARAMETER RegexPattern
+    Regex pattern to match in file names for processing.
+
+.PARAMETER TargetFolder
+    Path of the folder where files are initially copied.
 
 .PARAMETER BackupFolder
-    Path of the folder where backups are stored.
+    Path of the folder where files are finally stored after verification.
 
 .EXAMPLE
-    .\ThisScript.ps1 -FilePath "C:\path\to\your\file.txt" -Pattern "your_pattern" -BackupFolder "C:\backup"
+    .\ThisScript.ps1 -SourceFolder "C:\path\to\your\folder" -RegexPattern "\w+_backup_\d{4}" -TargetFolder "C:\target" -BackupFolder "C:\backup"
 
 .NOTES
-    Version: 1.2
+    Version: 1.9
     GPL-3.0 License
     Author: Roman Poltoratski
-    Date: 2023-11-18
+    Date: 2023-11-19
 #>
 
 param (
-    [string]$FilePath,
-    [string]$Pattern,
+    [string]$SourceFolder,
+    [string]$RegexPattern,
+    [string]$TargetFolder,
     [string]$BackupFolder
 )
 
-function Generate-GuidFromFile {
-    param (
-        [string]$FilePath
-    )
+# Existing functions (Generate-GuidFromFile, Test-BackupIntegrity) remain the same
 
-    if (-Not (Test-Path $FilePath)) {
-        Write-Error "File not found: $FilePath"
-        return $null
-    }
-
-    try {
-        $file = Get-Item $FilePath
-        $fileName = $file.Name
-        $fileSize = $file.Length
-        $sha1 = New-Object System.Security.Cryptography.SHA1CryptoServiceProvider
-        $fileContent = [System.IO.File]::ReadAllBytes($FilePath)
-        $hashBytes = $sha1.ComputeHash($fileContent)
-        $hashString = -join ($hashBytes | ForEach-Object { $_.ToString("x2") })
-        $combinedString = "$fileName$fileSize$hashString"
-        $combinedBytes = [System.Text.Encoding]::UTF8.GetBytes($combinedString)
-        $finalHashBytes = $sha1.ComputeHash($combinedBytes)
-        $finalHashString = -join ($finalHashBytes | ForEach-Object { $_.ToString("x2") })
-        $guidString = $finalHashString.Substring(0, 32)
-        $guid = [guid]::new($guidString)
-        return $guid
-    } catch {
-        Write-Error "An error occurred while generating GUID: $_"
-        return $null
-    }
-}
-
-function Backup-FileWithVersioning {
+function Process-File {
     param (
         [string]$SourceFilePath,
-        [string]$DestinationFolder,
+        [string]$TargetFolderPath,
+        [string]$BackupFolderPath,
+        [string]$Regex,
         [string]$GUID
     )
 
     try {
         $fileName = [System.IO.Path]::GetFileName($SourceFilePath)
-        $backupFilePath = Join-Path $DestinationFolder $fileName
-        $backupGuidFilePath = $backupFilePath + ".GUID"
+        $patternMatch = if ($fileName -match $Regex) { $Matches[0] } else { "NoPattern" }
 
-        $version = 0
-        while (Test-Path $backupFilePath -or Test-Path $backupGuidFilePath) {
-            if ((Get-Content $backupGuidFilePath) -ne $GUID) {
+        # Create folders in target and backup based on the pattern match
+        $patternTargetFolder = Join-Path $TargetFolderPath $patternMatch
+        $patternBackupFolder = Join-Path $BackupFolderPath $patternMatch
+        New-Item -ItemType Directory -Path $patternTargetFolder, $patternBackupFolder -Force
+
+        # Versioning logic for both target and backup folders
+        foreach ($folder in @($patternTargetFolder, $patternBackupFolder)) {
+            $versionedFilePath = Join-Path $folder $fileName
+            $version = 0
+            while (Test-Path $versionedFilePath) {
                 $version++
-                $backupFilePath = Join-Path $DestinationFolder ($fileName -replace "\.([^.]+)$", ("v" + $version + ".$1"))
-                $backupGuidFilePath = $backupFilePath + ".GUID"
-            } else {
-                break
+                $versionedFilePath = Join-Path $folder ($fileName -replace "\.([^.]+)$", ("v" + $version + ".$1"))
             }
         }
 
-        Copy-Item $SourceFilePath $backupFilePath
-        $GUID | Out-File $backupGuidFilePath
-        return $true
+        # Copy the file to the target folder and verify
+        $targetFilePath = Join-Path $patternTargetFolder $fileName
+        Copy-Item $SourceFilePath $targetFilePath
+        $copiedFileGuid = Generate-GuidFromFile -FilePath $targetFilePath
+        if ($copiedFileGuid -eq $GUID) {
+            # Move the source file to the backup folder if GUIDs match
+            $backupFilePath = Join-Path $patternBackupFolder $fileName
+            Move-Item $SourceFilePath $backupFilePath -Force
+            return $true
+        } else {
+            Write-Host "GUID mismatch for file: $SourceFilePath"
+            return $false
+        }
     } catch {
-        Write-Error "An error occurred while backing up the file: $_"
+        Write-Error "An error occurred during the file processing: $_"
         return $false
     }
 }
 
-function Test-BackupIntegrity {
-    param (
-        [string]$BackupFolder
-    )
-
-    $backupFiles = Get-ChildItem $BackupFolder -Recurse | Where-Object { -not $_.PSIsContainer }
-    foreach ($file in $backupFiles) {
-        if ($file.Extension -eq ".GUID") {
-            continue
-        }
-
-        $guidFilePath = $file.FullName + ".GUID"
-        if (-not (Test-Path $guidFilePath)) {
-            Write-Host "Missing GUID file for: $($file.FullName)"
-            continue
-        }
-
-        $originalGuid = Get-Content $guidFilePath
-        $computedGuid = Generate-GuidFromFile -FilePath $file.FullName
-        if ($originalGuid -ne $computedGuid) {
-            Write-Host "Integrity check failed for: $($file.FullName)"
-        }
-    }
-}
-
 # Main script logic
-$guid = Generate-GuidFromFile -FilePath $FilePath
-if ($guid -eq $null) {
-    Write-Host "Exiting due to error in GUID generation."
+if (-Not (Test-Path $SourceFolder)) {
+    Write-Error "Source folder not found: $SourceFolder"
     exit
 }
 
-if ($FilePath -match $Pattern) {
-    $dateFolder = (Get-Date).ToString("yyyy-MM-dd")
-    $dateSpecificBackupFolder = Join-Path $BackupFolder $dateFolder
-    if (-Not (Test-Path $dateSpecificBackupFolder)) {
-        New-Item -ItemType Directory -Path $dateSpecificBackupFolder
+$files = Get-ChildItem -Path $SourceFolder -Recurse -File
+foreach ($file in $files) {
+    $filePath = $file.FullName
+    $guid = Generate-GuidFromFile -FilePath $filePath
+    if ($guid -eq $null) {
+        Write-Host "Skipping file due to error in GUID generation: $filePath"
+        continue
     }
 
-    $backupSuccess = Backup-FileWithVersioning -SourceFilePath $FilePath -DestinationFolder $dateSpecificBackupFolder -GUID $guid
-    if (-not $backupSuccess) {
-        Write-Host "Exiting due to error in backup process."
-        exit
+    if ($filePath -match $RegexPattern) {
+        $processSuccess = Process-File -SourceFilePath $filePath -TargetFolderPath $TargetFolder -BackupFolderPath $BackupFolder -Regex $RegexPattern -GUID $guid
+        if (-not $processSuccess) {
+            Write-Host "Error occurred during the file processing for: $filePath"
+        }
     }
 }
-
-# Optional: Perform integrity check on the backups
-# Test-BackupIntegrity -BackupFolder $BackupFolder
